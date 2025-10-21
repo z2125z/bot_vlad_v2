@@ -14,7 +14,3 @@ instance/
 .webassets-cache
 .coverage
 .pytest_cache/
-*.log
-.DS_Store
-*.sqlite
-*.db-journal
