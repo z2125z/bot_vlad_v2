@@ -92,12 +92,13 @@ class Database:
             INSERT INTO user_activity (user_id, action_type)
             VALUES (?, ?)
         ''', (user_id, action_type))
+        self.update_user_activity(user_id)
         self.conn.commit()
 
     def get_all_users(self):
         cursor = self.conn.cursor()
         cursor.execute('SELECT * FROM users ORDER BY joined_date DESC')
-        return cursor.fetchall()
+        return [dict(row) for row in cursor.fetchall()]
 
     def get_user_count(self):
         cursor = self.conn.cursor()
@@ -128,7 +129,7 @@ class Database:
         else:
             return []
             
-        return cursor.fetchall()
+        return [dict(row) for row in cursor.fetchall()]
 
     def get_audience_count(self, audience_type):
         users = self.get_users_by_audience(audience_type)
@@ -156,7 +157,7 @@ class Database:
         cursor = self.conn.cursor()
         cursor.execute('''
             SELECT COUNT(*) FROM sent_mailings 
-            WHERE mailing_id = ?
+            WHERE mailing_id = ? AND status = 'sent'
         ''', (mailing_id,))
         return cursor.fetchone()[0]
 
@@ -171,18 +172,20 @@ class Database:
     def get_all_mailings(self):
         cursor = self.conn.cursor()
         cursor.execute('''
-            SELECT m.*, COUNT(sm.id) as delivered_count 
+            SELECT m.*, 
+                   COUNT(CASE WHEN sm.status = 'sent' THEN 1 END) as delivered_count 
             FROM mailings m 
             LEFT JOIN sent_mailings sm ON m.id = sm.mailing_id 
             GROUP BY m.id 
             ORDER BY m.created_at DESC
         ''')
-        return cursor.fetchall()
+        return [dict(row) for row in cursor.fetchall()]
 
     def get_mailing_by_id(self, mailing_id):
         cursor = self.conn.cursor()
         cursor.execute('SELECT * FROM mailings WHERE id = ?', (mailing_id,))
-        return cursor.fetchone()
+        result = cursor.fetchone()
+        return dict(result) if result else None
 
     def get_detailed_stats(self):
         cursor = self.conn.cursor()
@@ -240,12 +243,17 @@ class Database:
         
         # Средняя активность пользователей
         cursor.execute('''
-            SELECT COUNT(*) / COUNT(DISTINCT user_id) as avg_activity 
+            SELECT 
+                CASE 
+                    WHEN COUNT(DISTINCT user_id) > 0 THEN 
+                        CAST(COUNT(*) AS FLOAT) / COUNT(DISTINCT user_id)
+                    ELSE 0
+                END as avg_activity 
             FROM user_activity 
             WHERE timestamp >= datetime('now', '-7 day')
         ''')
         avg_activity_result = cursor.fetchone()
-        avg_activity_per_user = avg_activity_result[0] if avg_activity_result[0] else 0
+        avg_activity_per_user = round(avg_activity_result[0], 2) if avg_activity_result and avg_activity_result[0] else 0
 
         return {
             'total_users': total_users,
@@ -258,7 +266,7 @@ class Database:
             'total_sent_messages': total_sent_messages,
             'successful_deliveries': successful_deliveries,
             'failed_deliveries': failed_deliveries,
-            'avg_activity_per_user': round(avg_activity_per_user, 2)
+            'avg_activity_per_user': avg_activity_per_user
         }
 
     def get_user_growth_data(self, days=30):
@@ -297,7 +305,7 @@ class Database:
             ORDER BY activity_count DESC
             LIMIT ?
         ''', (limit,))
-        return cursor.fetchall()
+        return [dict(row) for row in cursor.fetchall()]
 
     def get_mailing_performance(self):
         """Получить статистику эффективности рассылок"""
@@ -308,14 +316,18 @@ class Database:
                 m.title,
                 m.created_at,
                 m.sent_count,
-                COUNT(sm.id) as delivered_count,
-                ROUND((COUNT(sm.id) * 100.0 / m.sent_count), 2) as delivery_rate
+                COUNT(CASE WHEN sm.status = 'sent' THEN 1 END) as delivered_count,
+                CASE 
+                    WHEN m.sent_count > 0 THEN 
+                        ROUND((COUNT(CASE WHEN sm.status = 'sent' THEN 1 END) * 100.0 / m.sent_count), 2)
+                    ELSE 0
+                END as delivery_rate
             FROM mailings m
-            LEFT JOIN sent_mailings sm ON m.id = sm.mailing_id AND sm.status = 'sent'
+            LEFT JOIN sent_mailings sm ON m.id = sm.mailing_id
             GROUP BY m.id
             ORDER BY m.created_at DESC
         ''')
-        return cursor.fetchall()
+        return [dict(row) for row in cursor.fetchall()]
 
     def get_user_segments(self):
         """Получить сегменты пользователей для маркетинга"""
@@ -340,16 +352,117 @@ class Database:
         inactive_users = cursor.fetchone()[0]
         
         # Пользователи с username
-        cursor.execute('SELECT COUNT(*) FROM users WHERE username IS NOT NULL')
+        cursor.execute('SELECT COUNT(*) FROM users WHERE username IS NOT NULL AND username != ""')
         users_with_username = cursor.fetchone()[0]
+        
+        total_users = self.get_user_count()
         
         return {
             'new_users': new_users,
             'active_users': active_users,
             'inactive_users': inactive_users,
             'users_with_username': users_with_username,
-            'users_without_username': self.get_user_count() - users_with_username
+            'users_without_username': total_users - users_with_username
         }
+
+    def get_user_messages_stats(self, user_id):
+        """Получить статистику сообщений пользователя"""
+        cursor = self.conn.cursor()
+        
+        # Общее количество сообщений
+        cursor.execute('''
+            SELECT COUNT(*) FROM user_activity 
+            WHERE user_id = ? AND action_type = 'message'
+        ''', (user_id,))
+        total_messages = cursor.fetchone()[0]
+        
+        # Сообщения за последние 7 дней
+        cursor.execute('''
+            SELECT COUNT(*) FROM user_activity 
+            WHERE user_id = ? AND action_type = 'message' 
+            AND timestamp >= datetime('now', '-7 days')
+        ''', (user_id,))
+        recent_messages = cursor.fetchone()[0]
+        
+        # Первое и последнее сообщение
+        cursor.execute('''
+            SELECT MIN(timestamp), MAX(timestamp) FROM user_activity 
+            WHERE user_id = ? AND action_type = 'message'
+        ''', (user_id,))
+        first_last = cursor.fetchone()
+        
+        return {
+            'total_messages': total_messages,
+            'recent_messages': recent_messages,
+            'first_message': first_last[0] if first_last else None,
+            'last_message': first_last[1] if first_last else None
+        }
+
+    def get_daily_stats(self, date=None):
+        """Получить статистику за конкретный день"""
+        if date is None:
+            date = datetime.now().strftime('%Y-%m-%d')
+            
+        cursor = self.conn.cursor()
+        
+        # Новые пользователи за день
+        cursor.execute('''
+            SELECT COUNT(*) FROM users 
+            WHERE date(joined_date) = ?
+        ''', (date,))
+        new_users = cursor.fetchone()[0]
+        
+        # Активные пользователи за день
+        cursor.execute('''
+            SELECT COUNT(DISTINCT user_id) FROM user_activity 
+            WHERE date(timestamp) = ?
+        ''', (date,))
+        active_users = cursor.fetchone()[0]
+        
+        # Количество действий за день
+        cursor.execute('''
+            SELECT COUNT(*) FROM user_activity 
+            WHERE date(timestamp) = ?
+        ''', (date,))
+        total_actions = cursor.fetchone()[0]
+        
+        return {
+            'date': date,
+            'new_users': new_users,
+            'active_users': active_users,
+            'total_actions': total_actions
+        }
+
+    def get_retention_data(self, cohort_days=30):
+        """Получить данные по удержанию пользователей"""
+        cursor = self.conn.cursor()
+        
+        cursor.execute('''
+            SELECT 
+                date(joined_date) as cohort_date,
+                COUNT(*) as cohort_size,
+                COUNT(CASE WHEN EXISTS (
+                    SELECT 1 FROM user_activity 
+                    WHERE user_id = users.user_id 
+                    AND date(timestamp) = date(users.joined_date, '+1 day')
+                ) THEN 1 END) as day_1_active,
+                COUNT(CASE WHEN EXISTS (
+                    SELECT 1 FROM user_activity 
+                    WHERE user_id = users.user_id 
+                    AND date(timestamp) = date(users.joined_date, '+7 day')
+                ) THEN 1 END) as day_7_active,
+                COUNT(CASE WHEN EXISTS (
+                    SELECT 1 FROM user_activity 
+                    WHERE user_id = users.user_id 
+                    AND date(timestamp) = date(users.joined_date, '+30 day')
+                ) THEN 1 END) as day_30_active
+            FROM users
+            WHERE joined_date >= datetime('now', '-? day')
+            GROUP BY date(joined_date)
+            ORDER BY cohort_date DESC
+        ''', (cohort_days,))
+        
+        return [dict(row) for row in cursor.fetchall()]
 
     def close(self):
         self.conn.close()
