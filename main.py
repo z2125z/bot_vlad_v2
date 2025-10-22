@@ -17,7 +17,10 @@ async def set_bot_commands(bot: Bot):
     """Установка команд бота"""
     commands = [
         BotCommand(command="/start", description="Запустить бота"),
-        BotCommand(command="/admin", description="Админ-панель")
+        BotCommand(command="/help", description="Получить помощь"),
+        BotCommand(command="/myid", description="Узнать свой ID"),
+        BotCommand(command="/admin", description="Админ-панель"),
+        BotCommand(command="/debug", description="Диагностика проблем")  # Добавляем диагностическую команду
     ]
     await bot.set_my_commands(commands)
 
@@ -28,7 +31,6 @@ async def main():
     try:
         Config.validate_config()
         logger.info("Конфигурация проверена успешно")
-        logger.info(f"ADMIN_IDS: {Config.ADMIN_IDS}")
     except ValueError as e:
         logger.error(f"Ошибка конфигурации: {e}")
         return

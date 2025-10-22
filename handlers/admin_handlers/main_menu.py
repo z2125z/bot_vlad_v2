@@ -10,7 +10,7 @@ router = Router()
 db = Database()
 
 def is_admin(user_id: int) -> bool:
-    return user_id in Config.ADMIN_IDS
+    return Config.is_admin(user_id)
 
 def get_admin_main_menu():
     """Главное меню админа"""
@@ -63,6 +63,8 @@ async def get_dashboard_stats():
 
 @router.message(Command("admin"))
 async def admin_panel(message: types.Message):
+    print(f"🎯 Получена команда /admin от пользователя {message.from_user.id}")  # Отладочная информация
+    
     if not is_admin(message.from_user.id):
         await message.answer("❌ У вас нет доступа к админ-панели")
         return

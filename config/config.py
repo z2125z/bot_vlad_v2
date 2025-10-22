@@ -14,5 +14,14 @@ class Config:
         if not cls.BOT_TOKEN:
             raise ValueError("BOT_TOKEN не установлен в .env файле")
         if not cls.ADMIN_IDS:
-            print("⚠️  ADMIN_IDS не установлены - админ-панель будет недоступна")
+            print("⚠️  WARNING: ADMIN_IDS не установлены - админ-панель будет недоступна")
+        else:
+            print(f"✅ ADMIN_IDS: {cls.ADMIN_IDS}")
         return True
+
+    @classmethod
+    def is_admin(cls, user_id: int) -> bool:
+        """Проверка является ли пользователь администратором"""
+        is_admin = user_id in cls.ADMIN_IDS
+        print(f"🔍 Проверка прав доступа: User {user_id} is admin: {is_admin}")
+        return is_admin

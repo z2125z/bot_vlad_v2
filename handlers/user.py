@@ -1,7 +1,6 @@
 from aiogram import Router, types
 from aiogram.filters import Command
 from database.db import Database
-from datetime import datetime
 
 router = Router()
 db = Database()
@@ -13,11 +12,54 @@ async def start_command(message: types.Message):
     db.record_user_activity(user.id, "start")
     
     await message.answer(
-        "Добро пожаловать! Этот бот предназначен для рассылки важных уведомлений."
+        "👋 <b>Добро пожаловать!</b>\n\n"
+        "Этот бот предназначен для рассылки важных уведомлений и обновлений.\n\n"
+        "📋 <b>Доступные команды:</b>\n"
+        "/start - Запустить бота\n"
+        "/help - Получить помощь\n"
+        "/myid - Узнать свой ID\n\n"
+        "⚡ <b>Будьте на связи!</b>",
+        parse_mode="HTML"
+    )
+
+@router.message(Command("help"))
+async def help_command(message: types.Message):
+    db.record_user_activity(message.from_user.id, "help")
+    
+    await message.answer(
+        "ℹ️ <b>Помощь по боту</b>\n\n"
+        "Этот бот предоставляет:\n"
+        "• 📨 Получение важных уведомлений\n"
+        "• 🔔 Своевременные обновления\n"
+        "• 📊 Статистику активности\n\n"
+        "Если у вас есть вопросы или проблемы, обратитесь к администратору.\n\n"
+        "<b>Основные команды:</b>\n"
+        "/start - Перезапустить бота\n"
+        "/help - Показать эту справку",
+        parse_mode="HTML"
     )
 
 @router.message(Command("myid"))
 async def get_my_id(message: types.Message):
     """Команда для получения своего ID"""
     user_id = message.from_user.id
-    await message.answer(f"Ваш Telegram ID: `{user_id}`\n\nДобавьте этот ID в ADMIN_IDS в файле .env", parse_mode="Markdown")
+    await message.answer(
+        f"🆔 <b>Ваш Telegram ID:</b> <code>{user_id}</code>\n\n"
+        "Этот ID может понадобиться администратору для предоставления доступа.",
+        parse_mode="HTML"
+    )
+
+# ВРЕМЕННО КОММЕНТИРУЕМ этот обработчик для диагностики
+# @router.message()
+# async def track_user_activity(message: types.Message):
+#     """Отслеживаем активность пользователей"""
+#     if message.from_user:
+#         db.record_user_activity(message.from_user.id, "message")
+        
+#         # Отвечаем на неизвестные команды
+#         if message.text.startswith('/'):
+#             await message.answer(
+#                 "❌ <b>Неизвестная команда</b>\n\n"
+#                 "Используйте /help для просмотра доступных команд.",
+#                 parse_mode="HTML"
+#             )
