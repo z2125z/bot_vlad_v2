@@ -5,7 +5,7 @@ from .admin_handlers.mailing_creator import router as mailing_creator_router
 from .admin_handlers.user_mailing import router as user_mailing_router
 from .admin_handlers.excel_reports import router as excel_reports_router
 from .admin_handlers.mailing_history import router as mailing_history_router
-from .admin_handlers.debug import router as debug_router  # Добавляем диагностический роутер
+from .admin_handlers.templates_manager import router as templates_manager_router
 
 # Собираем все роутеры
 all_routers = [
@@ -16,7 +16,7 @@ all_routers = [
     user_mailing_router,
     excel_reports_router,
     mailing_history_router,
-    debug_router  # Добавляем диагностический роутер
+    templates_manager_router
 ]
 
 __all__ = ['all_routers']

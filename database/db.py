@@ -24,16 +24,19 @@ class Database:
             )
         ''')
         
-        # Таблица рассылок
+        # Обновленная таблица рассылок с поддержкой медиа и шаблонов
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS mailings (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 title TEXT,
                 message_text TEXT,
                 message_type TEXT DEFAULT 'text',
+                media_type TEXT,
+                media_file_id TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 sent_count INTEGER DEFAULT 0,
-                audience_type TEXT DEFAULT 'all'
+                audience_type TEXT DEFAULT 'all',
+                is_template BOOLEAN DEFAULT 1
             )
         ''')
         
@@ -135,12 +138,13 @@ class Database:
         users = self.get_users_by_audience(audience_type)
         return len(users)
 
-    def save_mailing(self, title, message_text, message_type='text', audience_type='all'):
+    def save_mailing(self, title, message_text, message_type='text', media_type=None, media_file_id=None, audience_type='all', is_template=True):
+        """Сохранить рассылку с медиа"""
         cursor = self.conn.cursor()
         cursor.execute('''
-            INSERT INTO mailings (title, message_text, message_type, audience_type)
-            VALUES (?, ?, ?, ?)
-        ''', (title, message_text, message_type, audience_type))
+            INSERT INTO mailings (title, message_text, message_type, media_type, media_file_id, audience_type, is_template)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (title, message_text, message_type, media_type, media_file_id, audience_type, is_template))
         self.conn.commit()
         return cursor.lastrowid
 
@@ -186,6 +190,33 @@ class Database:
         cursor.execute('SELECT * FROM mailings WHERE id = ?', (mailing_id,))
         result = cursor.fetchone()
         return dict(result) if result else None
+
+    def get_all_templates(self):
+        """Получить все шаблоны рассылок"""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            SELECT * FROM mailings 
+            WHERE is_template = 1 
+            ORDER BY created_at DESC
+        ''')
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_template_by_id(self, template_id):
+        """Получить шаблон по ID"""
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM mailings WHERE id = ? AND is_template = 1', (template_id,))
+        result = cursor.fetchone()
+        return dict(result) if result else None
+
+    def update_template_status(self, template_id, is_template):
+        """Обновить статус шаблона"""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            UPDATE mailings 
+            SET is_template = ? 
+            WHERE id = ?
+        ''', (is_template, template_id))
+        self.conn.commit()
 
     def get_detailed_stats(self):
         cursor = self.conn.cursor()
@@ -234,6 +265,10 @@ class Database:
         cursor.execute('SELECT SUM(sent_count) FROM mailings')
         total_sent_messages = cursor.fetchone()[0] or 0
         
+        # Статистика по шаблонам
+        cursor.execute('SELECT COUNT(*) FROM mailings WHERE is_template = 1')
+        total_templates = cursor.fetchone()[0]
+        
         # Статистика доставки
         cursor.execute('SELECT COUNT(*) FROM sent_mailings WHERE status = "sent"')
         successful_deliveries = cursor.fetchone()[0]
@@ -255,6 +290,16 @@ class Database:
         avg_activity_result = cursor.fetchone()
         avg_activity_per_user = round(avg_activity_result[0], 2) if avg_activity_result and avg_activity_result[0] else 0
 
+        # Статистика по типам медиа в рассылках
+        cursor.execute('''
+            SELECT media_type, COUNT(*) as count 
+            FROM mailings 
+            WHERE media_type IS NOT NULL 
+            GROUP BY media_type
+        ''')
+        media_stats = cursor.fetchall()
+        media_type_stats = {row['media_type']: row['count'] for row in media_stats}
+
         return {
             'total_users': total_users,
             'new_users_today': new_users_today,
@@ -263,10 +308,12 @@ class Database:
             'active_users_week': active_users_week,
             'active_users_today': active_users_today,
             'total_mailings': total_mailings,
+            'total_templates': total_templates,
             'total_sent_messages': total_sent_messages,
             'successful_deliveries': successful_deliveries,
             'failed_deliveries': failed_deliveries,
-            'avg_activity_per_user': avg_activity_per_user
+            'avg_activity_per_user': avg_activity_per_user,
+            'media_type_stats': media_type_stats
         }
 
     def get_user_growth_data(self, days=30):
@@ -314,6 +361,8 @@ class Database:
             SELECT 
                 m.id,
                 m.title,
+                m.message_type,
+                m.media_type,
                 m.created_at,
                 m.sent_count,
                 COUNT(CASE WHEN sm.status = 'sent' THEN 1 END) as delivered_count,
@@ -462,6 +511,48 @@ class Database:
             ORDER BY cohort_date DESC
         ''', (cohort_days,))
         
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_mailing_templates_by_type(self):
+        """Получить статистику шаблонов по типам контента"""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            SELECT 
+                CASE 
+                    WHEN media_type IS NULL THEN 'text'
+                    ELSE media_type
+                END as content_type,
+                COUNT(*) as count
+            FROM mailings
+            WHERE is_template = 1
+            GROUP BY content_type
+            ORDER BY count DESC
+        ''')
+        return [dict(row) for row in cursor.fetchall()]
+
+    def search_templates(self, search_term):
+        """Поиск шаблонов по заголовку"""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            SELECT * FROM mailings 
+            WHERE is_template = 1 AND title LIKE ?
+            ORDER BY created_at DESC
+        ''', (f'%{search_term}%',))
+        return [dict(row) for row in cursor.fetchall()]
+
+    def get_recent_mailings(self, limit=10):
+        """Получить последние рассылки"""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            SELECT m.*, 
+                   COUNT(CASE WHEN sm.status = 'sent' THEN 1 END) as delivered_count 
+            FROM mailings m 
+            LEFT JOIN sent_mailings sm ON m.id = sm.mailing_id 
+            WHERE m.is_template = 0
+            GROUP BY m.id 
+            ORDER BY m.created_at DESC
+            LIMIT ?
+        ''', (limit,))
         return [dict(row) for row in cursor.fetchall()]
 
     def close(self):

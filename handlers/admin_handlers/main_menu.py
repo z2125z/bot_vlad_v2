@@ -10,7 +10,7 @@ router = Router()
 db = Database()
 
 def is_admin(user_id: int) -> bool:
-    return Config.is_admin(user_id)
+    return user_id in Config.ADMIN_IDS
 
 def get_admin_main_menu():
     """Главное меню админа"""
@@ -21,10 +21,13 @@ def get_admin_main_menu():
         ],
         [
             InlineKeyboardButton(text="📨 Создать рассылку", callback_data="admin_create_mailing"),
-            InlineKeyboardButton(text="📋 История рассылок", callback_data="admin_mailing_history")
+            InlineKeyboardButton(text="📁 Шаблоны рассылок", callback_data="admin_templates")
         ],
         [
-            InlineKeyboardButton(text="📈 Excel отчет", callback_data="admin_excel_report"),
+            InlineKeyboardButton(text="📋 История рассылок", callback_data="admin_mailing_history"),
+            InlineKeyboardButton(text="📈 Excel отчет", callback_data="admin_excel_report")
+        ],
+        [
             InlineKeyboardButton(text="🔄 Обновить данные", callback_data="admin_refresh")
         ]
     ])
