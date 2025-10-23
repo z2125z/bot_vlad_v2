@@ -49,17 +49,16 @@ async def get_my_id(message: types.Message):
         parse_mode="HTML"
     )
 
-# ВРЕМЕННО КОММЕНТИРУЕМ этот обработчик для диагностики
-# @router.message()
-# async def track_user_activity(message: types.Message):
-#     """Отслеживаем активность пользователей"""
-#     if message.from_user:
-#         db.record_user_activity(message.from_user.id, "message")
+@router.message()
+async def track_user_activity(message: types.Message):
+    """Отслеживаем активность пользователей"""
+    if message.from_user:
+        db.record_user_activity(message.from_user.id, "message")
         
-#         # Отвечаем на неизвестные команды
-#         if message.text.startswith('/'):
-#             await message.answer(
-#                 "❌ <b>Неизвестная команда</b>\n\n"
-#                 "Используйте /help для просмотра доступных команд.",
-#                 parse_mode="HTML"
-#             )
+        # Отвечаем на неизвестные команды
+        if message.text and message.text.startswith('/'):
+            await message.answer(
+                "❌ <b>Неизвестная команда</b>\n\n"
+                "Используйте /help для просмотра доступных команд.",
+                parse_mode="HTML"
+            )

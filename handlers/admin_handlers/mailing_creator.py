@@ -1,12 +1,12 @@
 from aiogram import Router, types, F
 from aiogram.filters import Command, StateFilter
-from aiogram.fsm.context import FSMContext  # Этот импорт должен быть
+from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
 from config.config import Config
 from services.mailing_service import MailingService
 from database.db import Database
-from datetime import datetime  # Этот импорт должен быть
+from datetime import datetime
 import os
 
 router = Router()
@@ -198,6 +198,7 @@ async def process_audience_selection(update, state: FSMContext):
     """Обработка выбора аудитории"""
     if isinstance(update, types.CallbackQuery):
         message = update.message
+        await update.answer()
     else:
         message = update
     

@@ -14,3 +14,4 @@ instance/
 .webassets-cache
 .coverage
 .pytest_cache/
+reports/*.xlsx

@@ -18,10 +18,3 @@ class Config:
         else:
             print(f"✅ ADMIN_IDS: {cls.ADMIN_IDS}")
         return True
-
-    @classmethod
-    def is_admin(cls, user_id: int) -> bool:
-        """Проверка является ли пользователь администратором"""
-        is_admin = user_id in cls.ADMIN_IDS
-        print(f"🔍 Проверка прав доступа: User {user_id} is admin: {is_admin}")
-        return is_admin

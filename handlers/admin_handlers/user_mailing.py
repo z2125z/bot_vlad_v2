@@ -5,9 +5,15 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from config.config import Config
 from database.db import Database
+from services.mailing_service import MailingService
+from datetime import datetime
+
 
 router = Router()
 db = Database()
+
+def is_admin(user_id: int) -> bool:
+    return user_id in Config.ADMIN_IDS
 
 class UserMailing(StatesGroup):
     selecting_audience = State()
@@ -99,7 +105,7 @@ async def select_audience(callback: types.CallbackQuery, state: FSMContext):
 
 @router.message(UserMailing.writing_message)
 async def process_user_mailing_message(message: types.Message, state: FSMContext):
-    await state.update_data(message_text=message.text)
+    await state.update_data(message_text=message.html_text)
     await state.set_state(UserMailing.confirmation)
     
     data = await state.get_data()
@@ -117,6 +123,73 @@ async def process_user_mailing_message(message: types.Message, state: FSMContext
                 InlineKeyboardButton(text="✅ Отправить", callback_data="confirm_user_mailing"),
                 InlineKeyboardButton(text="❌ Отменить", callback_data="cancel_user_mailing")
             ]
+        ]),
+        parse_mode="HTML"
+    )
+
+@router.callback_query(UserMailing.confirmation, F.data == "confirm_user_mailing")
+async def confirm_user_mailing(callback: types.CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа")
+        return
+
+    data = await state.get_data()
+    
+ # Получаем бот из контекста
+    from main import bot
+    mailing_service = MailingService(bot)
+        
+    # Показываем уведомление о начале рассылки
+    await callback.message.edit_text(
+        "📨 <b>Рассылка запущена...</b>\n\n"
+        "⏳ Отправляем сообщения пользователям...",
+        parse_mode="HTML"
+    )
+    
+    # Сохраняем рассылку
+    mailing_id = db.save_mailing(
+        title=f"Быстрая рассылка - {datetime.now().strftime('%d.%m.%Y %H:%M')}",
+        message_text=data['message_text'],
+        message_type='text',
+        audience_type=data['audience_type'],
+        is_template=False
+    )
+    
+    # Отправляем рассылку
+    success_count, total_count = await mailing_service.send_mailing(
+        mailing_id, 
+        data['message_text'],
+        'text',
+        None,
+        None,
+        data['audience_type']
+    )
+    
+    delivery_rate = round((success_count/total_count)*100, 2) if total_count > 0 else 0
+    
+    await callback.message.edit_text(
+        f"✅ <b>Рассылка завершена!</b>\n\n"
+        f"🎯 <b>Аудитория:</b> {data['audience_type']}\n"
+        f"✅ <b>Успешно отправлено:</b> {success_count}/{total_count}\n"
+        f"📊 <b>Процент доставки:</b> {delivery_rate}%\n\n"
+        f"📅 <b>Время отправки:</b> {datetime.now().strftime('%d.%m.%Y %H:%M')}",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📊 Статистика рассылок", callback_data="stats_mailings")],
+            [InlineKeyboardButton(text="📨 Новая рассылка", callback_data="user_mailing_start")],
+            [InlineKeyboardButton(text="🔙 В админ-панель", callback_data="admin_refresh")]
+        ]),
+        parse_mode="HTML"
+    )
+    
+    await state.clear()
+
+@router.callback_query(UserMailing.confirmation, F.data == "cancel_user_mailing")
+async def cancel_user_mailing(callback: types.CallbackQuery, state: FSMContext):
+    await state.clear()
+    await callback.message.edit_text(
+        "❌ <b>Рассылка отменена</b>",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 В админ-панель", callback_data="admin_refresh")]
         ]),
         parse_mode="HTML"
     )

@@ -8,21 +8,28 @@ router = Router()
 db = Database()
 
 def is_admin(user_id: int) -> bool:
+    print(f"🔍 Проверка админских прав для {user_id}, ADMIN_IDS: {Config.ADMIN_IDS}")
     return user_id in Config.ADMIN_IDS
 
 @router.message(Command("admin"))
 async def admin_panel(message: types.Message):
-    if not is_admin(message.from_user.id):
-        await message.answer("У вас нет доступа к этой команде.")
+    user_id = message.from_user.id
+    print(f"🎯 Команда /admin получена от пользователя {user_id}")
+    
+    if not is_admin(user_id):
+        print(f"❌ Пользователь {user_id} не является администратором")
+        await message.answer("❌ У вас нет доступа к админ-панели.")
         return
 
+    print(f"✅ Пользователь {user_id} имеет доступ к админ-панели")
+    
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats")],
         [InlineKeyboardButton(text="📨 Новая рассылка", callback_data="admin_new_mailing")],
         [InlineKeyboardButton(text="📋 История рассылок", callback_data="admin_mailing_history")]
     ])
     
-    await message.answer("Панель администратора:", reply_markup=keyboard)
+    await message.answer("🛠️ Панель администратора:", reply_markup=keyboard)
 
 @router.callback_query(F.data == "admin_stats")
 async def show_stats(callback: types.CallbackQuery):
@@ -61,7 +68,7 @@ async def show_mailing_history(callback: types.CallbackQuery):
         return
 
     text = "📋 История рассылок:\n\n"
-    for mailing in mailings[:10]:  # Показываем последние 10 рассылок
+    for mailing in mailings[:10]:
         text += f"ID: {mailing[0]}\n"
         text += f"Текст: {mailing[1][:100]}...\n"
         text += f"Отправлено: {mailing[4]} пользователей\n"

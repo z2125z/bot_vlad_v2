@@ -1,10 +1,10 @@
 from aiogram import Router, types, F
-from aiogram.fsm.context import FSMContext  # ДОБАВИТЬ ЭТОТ ИМПОРТ
+from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from database.db import Database
 from config.config import Config
 from services.mailing_service import MailingService
-from datetime import datetime  # ДОБАВИТЬ ЭТОТ ИМПОРТ
+from datetime import datetime
 
 router = Router()
 db = Database()
